@@ -1,9 +1,10 @@
 # 複製成 .dev.vars（此檔已被 .gitignore 忽略），wrangler dev 會自動載入
+# 首次登入用的 bootstrap 管理員帳密（第一次登入即建立第一個管理員）
 DASHBOARD_USER = "admin"
 DASHBOARD_PASS = "change-me"
-# 若要在本機測 catch-all：
-# CATCHALL_DESTINATION = "you@gmail.com"
-# M2 回信：填入 Resend API key（並在 Resend 驗證你的 MAIL_DOMAIN）後即啟用反向別名回信
+# 簽 session cookie 的密鑰（正式環境務必另設；未設會退回用 DASHBOARD_PASS）
+# SESSION_SECRET = "please-change-this-to-a-long-random-string"
+# M2 回信：填入 Resend API key（並在 Resend 驗證你要寄件的網域）後即啟用反向別名回信
 # RESEND_API_KEY = "re_xxxxxxxx"
 # OUTBOUND_DAILY_LIMIT = "50"
 # M3 AI 分析：填入 Anthropic API key 後，進站信自動摘要／分類／釣魚偵測

@@ -1,11 +1,13 @@
 # opt-mail — 自有網域的一次性信箱
 
-用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0 收信轉發 + M1 別名管理 + M2 一次性地址回信 + M3 AI 加值**：
+用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0～M4**：
 
-- `*@你的網域` 進來的信，由 Cloudflare Email Worker 依規則**轉發**到你的真實信箱
-- Dashboard 可建立 / 停用 / 刪除別名、查看轉發與回信紀錄
-- **回信**：接上 Resend 後，你在信箱直接按「回覆」就會用**一次性地址**代寄給對方，真實信箱不外洩（reverse alias）
-- **AI 加值**：接上 Anthropic API 後，進站信自動做**一句話摘要 / 分類 / 釣魚偵測**，結果顯示在 Dashboard
+- **M0 收信轉發**：`*@你的網域` 進來的信，由 Cloudflare Email Worker 依規則**轉發**到你的真實信箱
+- **M1 別名管理**：Dashboard 可建立 / 停用 / 刪除別名、查看轉發與回信紀錄
+- **M2 回信**：接上 Resend 後，你在信箱直接按「回覆」就會用**一次性地址**代寄給對方，真實信箱不外洩（reverse alias）
+- **M3 AI 加值**：接上 Anthropic API 後，進站信自動做**一句話摘要 / 分類 / 釣魚偵測**
+- **M4 多使用者、多網域**：登入制（session cookie + PBKDF2 密碼雜湊），每位使用者的網域／別名／信件互相隔離；
+  可管理多個網域，catch-all 改為**每個網域各自**設定；管理員可新增使用者
 - 資料存在 Cloudflare D1（SQLite）
 
 > M2 回信與 M3 AI 都是**選用**的：分別由 `RESEND_API_KEY` / `ANTHROPIC_API_KEY` 有沒有設定決定是否啟用；
@@ -20,7 +22,7 @@
                      │
                      ▼
              opt-mail Worker
-              ├─ email()  進站信
+              ├─ email()  進站信（依「收件網域 + local_part」查別名）
               │    ├─ 一般別名 → 查 D1 → 轉發到真實信箱
               │    │             （接了 Resend：改用 Resend 重送並把 Reply-To
               │    │               設成反向別名，讓你一按回覆就能匿名回信）
@@ -52,15 +54,20 @@ npx wrangler d1 create opt-mail-db
 npm run db:init
 npm run db:init:local
 
-# 5. 設定 Dashboard 登入帳密（機密）
-npx wrangler secret put DASHBOARD_USER
+# 5. 設定首次登入用的 bootstrap 管理員帳密 + session 密鑰（機密）
+npx wrangler secret put DASHBOARD_USER    # 第一次登入用；登入後即建立第一個管理員
 npx wrangler secret put DASHBOARD_PASS
+npx wrangler secret put SESSION_SECRET     # 隨機長字串，用來簽 session cookie
 
-# 6. 把 wrangler.toml 裡的 MAIL_DOMAIN 改成你的網域
+# 6.（選用）把 wrangler.toml 的 MAIL_DOMAIN 設成你的網域 →
+#    首次登入時會自動建成第一個網域；之後網域都在 Dashboard 管理
 
 # 7. 部署
 npm run deploy
 ```
+
+> 首次登入：開 Dashboard → 用上面設定的 `DASHBOARD_USER` / `DASHBOARD_PASS` 登入，
+> 系統會建立第一個**管理員**。之後可在 Dashboard 改密碼、新增其他使用者與網域。
 
 ## 設定 Cloudflare Email Routing（在網頁後台）
 
@@ -70,6 +77,11 @@ npm run deploy
    ⚠️ 別名的「轉發到」只能填**已驗證**的地址，否則 `forward()` 會失敗。
 3. **Routes → Catch-all address**：Action 選 **Send to a Worker → `opt-mail`**。
    （這樣所有 `*@你的網域` 的信都會進到 Worker 由程式決定怎麼處理）
+4. 每個要用的網域都各自做一次上面的設定，並在 Dashboard「網域」新增它。
+   未在 Dashboard 建立的網域，進站信會直接退信（`unknown_domain`）。
+
+> **多網域 / catch-all**：M4 起 catch-all 不再是全域開關，而是**每個網域各自**設定——
+> 在 Dashboard 的網域列填「catch-all 轉發到」就等於為該網域開啟 catch-all（未知地址自動建立並轉發到那）。
 
 ## 設定回信（M2，選用）
 
@@ -106,10 +118,12 @@ npm run deploy
 
 ## 使用
 
-1. 開 `https://opt-mail.<你的>.workers.dev`（用剛設定的帳密登入）
-2. 新增別名，例如 `shopee` → 轉發到 `you@gmail.com`
-3. 註冊網站時就填 `shopee@你的網域`
-4. 哪天 `shopee@...` 開始收到垃圾信 → 到 Dashboard **停用**它，之後那個地址的信會被靜默丟棄，`被打` 次數會累加（代表資料被賣了）
+1. 開 `https://opt-mail.<你的>.workers.dev` → 用管理員帳密**登入**
+2. 到「網域」新增你的網域（若已用 `MAIL_DOMAIN` 種子過就已存在）
+3. 新增別名：選網域 + `shopee` → 轉發到 `you@gmail.com`
+4. 註冊網站時就填 `shopee@你的網域`
+5. 哪天 `shopee@...` 開始收到垃圾信 → 到 Dashboard **停用**它，之後那個地址的信會被靜默丟棄，`被打` 次數會累加（代表資料被賣了）
+6. （管理員）可在「使用者管理」新增其他使用者；每個人的網域／別名／信件彼此隔離
 
 ## 本機開發
 
@@ -126,13 +140,16 @@ npm run dev                      # http://localhost:8787
 
 | 變數 | 說明 |
 |------|------|
-| `MAIL_DOMAIN` | 你的網域；Dashboard 顯示完整地址，也是回信（M2）的出站寄件網域（需在 Resend 驗證） |
-| `CATCHALL_MODE` | `off`＝只有建過的別名會轉發，其他退信（建議）；`on`＝任何地址第一次被寄到就自動建立並轉發 |
-| `CATCHALL_DESTINATION` | `CATCHALL_MODE=on` 時，未知地址自動轉發到這（需已驗證） |
+| `DASHBOARD_USER`（機密） | 首次登入用的 bootstrap 管理員帳號（登入後即建立第一個管理員） |
+| `DASHBOARD_PASS`（機密） | 首次登入用的 bootstrap 管理員密碼 |
+| `SESSION_SECRET`（機密） | 簽 session cookie 的密鑰；未設會退回用 `DASHBOARD_PASS`（正式環境務必另設） |
+| `MAIL_DOMAIN` | 選用：首次建立管理員時自動建成第一個網域（非 `example.com` 才會建）；之後網域都在 Dashboard 管理 |
 | `OUTBOUND_DAILY_LIMIT` | M2 回信每個別名每日出站上限，預設 `50` |
 | `RESEND_API_KEY`（機密） | M2 回信用的 Resend API key；有設定才啟用回信 |
 | `AI_MODEL` | M3 進站信分析用模型，預設 `claude-opus-5`（省錢可設 `claude-haiku-4-5`） |
 | `ANTHROPIC_API_KEY`（機密） | M3 AI 分析用的 Anthropic API key；有設定才啟用分析 |
+
+> catch-all 從 M4 起改為**每個網域各自**在 Dashboard 設定（不再用 `CATCHALL_MODE` 全域開關）。
 
 ## 路線圖
 
@@ -140,4 +157,4 @@ npm run dev                      # http://localhost:8787
 - [x] **M1** 別名管理 Dashboard
 - [x] **M2** 用一次性地址回信（reverse alias + Resend + 擁有者驗證 + 出站限流）
 - [x] **M3** AI 加值（進站信摘要 / 釣魚偵測 / 自動分類，Claude + 結構化輸出）
-- [ ] **M4** 多使用者、多網域
+- [x] **M4** 多使用者、多網域（session 登入 + PBKDF2 + per-user 隔離 + per-domain catch-all）

@@ -1,28 +1,40 @@
 export interface Env {
   DB: D1Database;
-  // Dashboard 登入（用 wrangler secret put 設定）
+  // 首次啟動用的 bootstrap 管理員帳密（用 wrangler secret put 設定）。
+  // 第一次登入時若 users 表為空，用這組帳密建立第一個管理員。
   DASHBOARD_USER: string;
   DASHBOARD_PASS: string;
-  // 顯示用網域，同時作為出站信件的寄件網域（需在 Resend 驗證）
-  MAIL_DOMAIN: string;
-  // catch-all 模式
-  CATCHALL_MODE: string;
-  CATCHALL_DESTINATION?: string;
+  // 簽 session cookie 的密鑰（機密）。未設定時退回用 DASHBOARD_PASS（建議正式環境務必另設）。
+  SESSION_SECRET?: string;
+  // 選用：首次啟動建立第一個管理員時，順便把這個網域建進 domains（方便從舊版遷移）。
+  MAIL_DOMAIN?: string;
   // ── M2 回信 ──────────────────────────────────────────────
-  // Resend API key（機密，用 wrangler secret put 設定）。
-  // 有設定 → 啟用反向別名回信；未設定 → 進站信退回原生 forward()（M0 行為）。
   RESEND_API_KEY?: string;
-  // 每個別名每日出站上限（防濫用），字串數字，預設 50
   OUTBOUND_DAILY_LIMIT?: string;
   // ── M3 AI 加值 ────────────────────────────────────────────
-  // Anthropic API key（機密）。有設定 → 進站信自動做摘要／分類／釣魚偵測；未設定 → 略過。
   ANTHROPIC_API_KEY?: string;
-  // 分析用模型，預設 claude-opus-5；想省錢可設 "claude-haiku-4-5"
   AI_MODEL?: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  is_admin: number;
+  created_at?: string;
+}
+
+export interface Domain {
+  id: number;
+  domain: string;
+  user_id: number;
+  catchall_destination: string | null;
+  created_at: string;
 }
 
 export interface Alias {
   id: number;
+  domain_id: number;
+  user_id: number;
   local_part: string;
   destination: string;
   note: string | null;

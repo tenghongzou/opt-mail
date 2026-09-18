@@ -12,14 +12,9 @@ database_id = "REPLACE_ME_AFTER_D1_CREATE"
 
 # ── 一般設定（非機密，可直接寫這）────────────────────────────
 [vars]
-# 你的網域，只用來在 Dashboard 顯示完整地址，例如 "example.com"
+# 選用：首次啟動建立第一個管理員時，順便把這個網域建進 domains（方便遷移）。
+# 之後網域一律在 Dashboard 管理，可加多個；catch-all 也改為「每個網域各自」設定。
 MAIL_DOMAIN = "example.com"
-# 收到「未建立的地址」時的行為：
-#   "off" = 直接退信（只有你在 Dashboard 建過的 alias 才會轉發）← 建議先用這個
-#   "on"  = catch-all，任何地址第一次被寄到就自動建立並轉發到 CATCHALL_DESTINATION
-CATCHALL_MODE = "off"
-# 若 CATCHALL_MODE = "on" 才需要，設你真正收信的信箱（且要先在 Email Routing 驗證過）
-# CATCHALL_DESTINATION = "you@gmail.com"
 
 # ── M2 回信 ─────────────────────────────────────────────────
 # 每個別名每日出站上限（防濫用）。留空預設 50。
@@ -30,9 +25,12 @@ OUTBOUND_DAILY_LIMIT = "50"
 AI_MODEL = "claude-opus-5"
 
 # ── 機密（不要寫在這，用 wrangler secret put 設定）──────────────
+# 首次登入用的 bootstrap 管理員帳密（第一次登入即建立第一個管理員）：
 # npx wrangler secret put DASHBOARD_USER
 # npx wrangler secret put DASHBOARD_PASS
-# M2 回信需要（同時要在 Resend 驗證 MAIL_DOMAIN）：
+# 簽 session cookie 的密鑰（正式環境務必設定；未設會退回用 DASHBOARD_PASS）：
+# npx wrangler secret put SESSION_SECRET
+# M2 回信需要（同時要在 Resend 驗證你要寄件的網域）：
 # npx wrangler secret put RESEND_API_KEY
 # M3 AI 分析需要：
 # npx wrangler secret put ANTHROPIC_API_KEY
