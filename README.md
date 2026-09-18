@@ -1,5 +1,11 @@
 # opt-mail — 自有網域的一次性信箱
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Hono](https://img.shields.io/badge/Hono-E36002?logo=hono&logoColor=white)](https://hono.dev/)
+[![Claude](https://img.shields.io/badge/AI-Claude-D97757?logo=anthropic&logoColor=white)](https://www.anthropic.com/)
+
 用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0～M4**：
 
 - **M0 收信轉發**：`*@你的網域` 進來的信，由 Cloudflare Email Worker 依規則**轉發**到你的真實信箱
