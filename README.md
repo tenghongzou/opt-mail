@@ -1,27 +1,33 @@
 # opt-mail — 自有網域的一次性信箱
 
-用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0 收信轉發 + M1 別名管理**：
+用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0 收信轉發 + M1 別名管理 + M2 一次性地址回信**：
 
 - `*@你的網域` 進來的信，由 Cloudflare Email Worker 依規則**轉發**到你的真實信箱
-- Dashboard 可建立 / 停用 / 刪除別名、查看轉發紀錄
+- Dashboard 可建立 / 停用 / 刪除別名、查看轉發與回信紀錄
+- **回信**：接上 Resend 後，你在信箱直接按「回覆」就會用**一次性地址**代寄給對方，真實信箱不外洩（reverse alias）
 - 資料存在 Cloudflare D1（SQLite）
 
-> 回信（用一次性地址寄信給對方）是之後的 **M2**，會接 Resend。這階段還用不到。
+> M2 回信是**選用**的：設定了 `RESEND_API_KEY` 才啟用；沒設定時進站信照舊用原生 `forward()` 轉發（M0 行為不變）。
 
 ---
 
 ## 架構
 
 ```
-外部寄件人 → Cloudflare Email Routing (catch-all)
+外部寄件人 ──→ Cloudflare Email Routing (catch-all)
                      │
                      ▼
              opt-mail Worker
-              ├─ email()  進站信 → 查 D1 → forward / 丟棄 / 退信 + 記 log
+              ├─ email()  進站信
+              │    ├─ 一般別名 → 查 D1 → 轉發到真實信箱
+              │    │             （接了 Resend：改用 Resend 重送並把 Reply-To
+              │    │               設成反向別名，讓你一按回覆就能匿名回信）
+              │    └─ 反向別名 → 這是你的回信 → 擁有者驗證 + 每日限流
+              │                  → 以「別名@網域」用 Resend 代寄給外部對象
               └─ fetch()  Dashboard / API（Hono）
                      │
                      ▼
-                 D1 (aliases, messages)
+          D1 (aliases, messages, reverse_aliases) ──→ Resend（出站）
 ```
 
 ---
@@ -61,6 +67,22 @@ npm run deploy
 3. **Routes → Catch-all address**：Action 選 **Send to a Worker → `opt-mail`**。
    （這樣所有 `*@你的網域` 的信都會進到 Worker 由程式決定怎麼處理）
 
+## 設定回信（M2，選用）
+
+回信要把信「從你的網域寄出去」，Cloudflare 原生 `forward()` / `send_email` 只能寄到已驗證地址，
+無法寄給任意外部對象，所以出站改用 **Resend**：
+
+1. 註冊 [Resend](https://resend.com) → **Domains** 新增並驗證你的 `MAIL_DOMAIN`
+   （照它給的 DKIM/SPF/DMARC 記錄加到 Cloudflare DNS）。
+2. 取得 API key，設成機密：`npx wrangler secret put RESEND_API_KEY`。
+3. 重新部署。之後：
+   - 別人寄到 `shopee@你的網域` → 你信箱收到的信 **Reply-To 會是一個反向別名**。
+   - 你直接**按回覆**打字送出 → Worker 驗證是你本人（寄件人＝該別名的 destination）、
+     未超出每日上限後，用 `shopee@你的網域` 代寄給對方，對方看不到你的真實信箱。
+   - 出站上限由 `OUTBOUND_DAILY_LIMIT` 控制（預設 50／別名／天）。
+
+> 沒設定 `RESEND_API_KEY` 就不會啟用回信，進站信仍用原生 `forward()` 轉發。
+
 ## 使用
 
 1. 開 `https://opt-mail.<你的>.workers.dev`（用剛設定的帳密登入）
@@ -83,14 +105,16 @@ npm run dev                      # http://localhost:8787
 
 | 變數 | 說明 |
 |------|------|
-| `MAIL_DOMAIN` | 你的網域，僅供 Dashboard 顯示完整地址 |
+| `MAIL_DOMAIN` | 你的網域；Dashboard 顯示完整地址，也是回信（M2）的出站寄件網域（需在 Resend 驗證） |
 | `CATCHALL_MODE` | `off`＝只有建過的別名會轉發，其他退信（建議）；`on`＝任何地址第一次被寄到就自動建立並轉發 |
 | `CATCHALL_DESTINATION` | `CATCHALL_MODE=on` 時，未知地址自動轉發到這（需已驗證） |
+| `OUTBOUND_DAILY_LIMIT` | M2 回信每個別名每日出站上限，預設 `50` |
+| `RESEND_API_KEY`（機密） | M2 回信用的 Resend API key；有設定才啟用回信 |
 
 ## 路線圖
 
 - [x] **M0** 收信轉發
 - [x] **M1** 別名管理 Dashboard
-- [ ] **M2** 用一次性地址回信（reverse alias + Resend + 擁有者驗證 + 出站限流）
+- [x] **M2** 用一次性地址回信（reverse alias + Resend + 擁有者驗證 + 出站限流）
 - [ ] **M3** AI 加值（進站信摘要 / 釣魚偵測 / 自動分類）
 - [ ] **M4** 多使用者、多網域

@@ -21,7 +21,13 @@ CATCHALL_MODE = "off"
 # 若 CATCHALL_MODE = "on" 才需要，設你真正收信的信箱（且要先在 Email Routing 驗證過）
 # CATCHALL_DESTINATION = "you@gmail.com"
 
+# ── M2 回信 ─────────────────────────────────────────────────
+# 每個別名每日出站上限（防濫用）。留空預設 50。
+OUTBOUND_DAILY_LIMIT = "50"
+
 # ── 機密（不要寫在這，用 wrangler secret put 設定）──────────────
 # npx wrangler secret put DASHBOARD_USER
 # npx wrangler secret put DASHBOARD_PASS
+# M2 回信需要（同時要在 Resend 驗證 MAIL_DOMAIN）：
+# npx wrangler secret put RESEND_API_KEY
 # 本機開發時放在 .dev.vars（見 .dev.vars.example）

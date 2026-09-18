@@ -18,7 +18,11 @@ app.get('/', (c) => c.html(dashboardHtml));
 
 // 前端啟動時取設定（顯示用網域、catch-all 狀態）
 app.get('/api/config', (c) =>
-  c.json({ domain: c.env.MAIL_DOMAIN, catchall: c.env.CATCHALL_MODE === 'on' }),
+  c.json({
+    domain: c.env.MAIL_DOMAIN,
+    catchall: c.env.CATCHALL_MODE === 'on',
+    reply: !!c.env.RESEND_API_KEY, // M2 回信是否啟用（有接 Resend）
+  }),
 );
 
 // 列出所有 alias
@@ -34,6 +38,7 @@ app.post('/api/aliases', async (c) => {
   const dest = (body.destination ?? '').trim();
   if (!local || !dest) return c.json({ error: 'local_part 與 destination 為必填' }, 400);
   if (!/^[a-z0-9._+-]+$/.test(local)) return c.json({ error: 'local_part 含不合法字元' }, 400);
+  if (/^rp[0-9a-f]{18}$/.test(local)) return c.json({ error: '此格式保留給系統回信使用' }, 400);
   try {
     const res = await c.env.DB.prepare(
       'INSERT INTO aliases (local_part, destination, note, active) VALUES (?, ?, ?, 1)',
@@ -79,6 +84,19 @@ app.delete('/api/aliases/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM messages WHERE alias_id = ?').bind(id).run();
   await c.env.DB.prepare('DELETE FROM aliases WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
+});
+
+// 反向別名清單（M2 回信對象），附所屬別名的 local_part
+app.get('/api/reverse-aliases', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT rev.id, rev.token, rev.alias_id, rev.external_addr, rev.created_at,
+            a.local_part
+       FROM reverse_aliases rev
+       JOIN aliases a ON a.id = rev.alias_id
+      ORDER BY rev.created_at DESC
+      LIMIT 200`,
+  ).all();
+  return c.json(results);
 });
 
 // 信件紀錄（可用 ?alias_id= 過濾）

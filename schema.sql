@@ -26,3 +26,19 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_alias ON messages(alias_id);
 CREATE INDEX IF NOT EXISTS idx_messages_time  ON messages(received_at);
+
+-- 反向別名（M2 回信用）
+-- 每一組 (別名, 外部通訊對象) 對應一個專屬 token 地址；
+-- 進站信轉發時把 Reply-To 設成 token@網域，使用者一按回覆就會寄回這裡，
+-- 由 Worker 以「別名@網域」的身分代寄給外部對象，藏住真實信箱。
+CREATE TABLE IF NOT EXISTS reverse_aliases (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  token         TEXT    NOT NULL UNIQUE,          -- 地址本體，例如 "rp<18碼hex>"
+  alias_id      INTEGER NOT NULL,                 -- 屬於哪個別名
+  external_addr TEXT    NOT NULL,                 -- 原始外部寄件人（小寫正規化）
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (alias_id, external_addr),               -- 同一組對象只發一個反向別名
+  FOREIGN KEY (alias_id) REFERENCES aliases(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reverse_token ON reverse_aliases(token);

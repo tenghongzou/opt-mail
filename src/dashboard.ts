@@ -85,11 +85,20 @@ export const dashboardHtml = /* html */ `<!doctype html>
     </table>
   </div>
 
-  <div class="card">
-    <h1 style="font-size:15px;margin-bottom:8px">最近進站信件</h1>
+  <div class="card" id="reverseCard" style="display:none">
+    <h1 style="font-size:15px;margin-bottom:4px">回信對象（反向別名）</h1>
+    <p class="muted" style="margin:0 0 8px">別人寄信進來後，你的信箱按「回覆」就會用對應的一次性地址代寄，真實信箱不外洩。</p>
     <div class="overflow"><table>
-      <thead><tr><th>時間</th><th>寄件人</th><th>收件地址</th><th>主旨</th><th>結果</th></tr></thead>
-      <tbody id="logs"><tr><td colspan="5" class="empty">載入中…</td></tr></tbody>
+      <thead><tr><th>你的別名</th><th>通訊對象</th><th>反向地址（回覆時系統自動使用）</th><th>建立時間</th></tr></thead>
+      <tbody id="reverse"><tr><td colspan="4" class="empty">載入中…</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h1 style="font-size:15px;margin-bottom:8px">最近信件</h1>
+    <div class="overflow"><table>
+      <thead><tr><th>時間</th><th></th><th>寄件人</th><th>收件地址</th><th>主旨</th><th>結果</th></tr></thead>
+      <tbody id="logs"><tr><td colspan="6" class="empty">載入中…</td></tr></tbody>
     </table></div>
   </div>
 </div>
@@ -108,8 +117,11 @@ async function api(path, opts) {
 async function boot() {
   const cfg = await api('/api/config');
   DOMAIN = cfg.domain;
-  $('domainLine').textContent = '網域 @' + DOMAIN + (cfg.catchall ? '（catch-all 已開啟）' : '（僅限已建立的地址）');
-  await Promise.all([loadAliases(), loadLogs()]);
+  const parts = [cfg.catchall ? 'catch-all 已開啟' : '僅限已建立的地址', cfg.reply ? '✉️ 回信已啟用' : '回信未啟用'];
+  $('domainLine').textContent = '網域 @' + DOMAIN + '（' + parts.join('、') + '）';
+  const tasks = [loadAliases(), loadLogs()];
+  if (cfg.reply) { $('reverseCard').style.display = ''; tasks.push(loadReverse()); }
+  await Promise.all(tasks);
 }
 
 async function loadAliases() {
@@ -130,15 +142,31 @@ async function loadAliases() {
     </tr>\`).join('');
 }
 
+async function loadReverse() {
+  const list = await api('/api/reverse-aliases');
+  const tb = $('reverse');
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">還沒有回信對象（有人寄信進來後會自動出現）</td></tr>'; return; }
+  tb.innerHTML = list.map((r) => \`
+    <tr>
+      <td class="addr">\${esc(r.local_part)}@\${esc(DOMAIN)}</td>
+      <td>\${esc(r.external_addr)}</td>
+      <td class="addr muted">\${esc(r.token)}@\${esc(DOMAIN)}</td>
+      <td class="muted" style="white-space:nowrap">\${esc(r.created_at)}</td>
+    </tr>\`).join('');
+}
+
 async function loadLogs() {
   const list = await api('/api/messages');
   const tb = $('logs');
-  if (!list.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">尚無信件</td></tr>'; return; }
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">尚無信件</td></tr>'; return; }
   const label = { forwarded: '✅ 已轉發', forwarded_catchall: '✅ 轉發(catch-all)',
-    dropped_disabled: '🗑️ 已停用丟棄', no_alias: '⛔ 無此地址', forward_failed: '⚠️ 轉發失敗' };
+    dropped_disabled: '🗑️ 已停用丟棄', no_alias: '⛔ 無此地址', forward_failed: '⚠️ 轉發失敗',
+    sent: '✅ 已回信', send_failed: '⚠️ 回信失敗', reply_rejected_owner: '🚫 非本人擋下',
+    reply_rejected_ratelimit: '⏳ 超出每日上限', reply_no_reverse: '⛔ 無此反向別名' };
   tb.innerHTML = list.map((m) => \`
     <tr>
       <td class="muted" style="white-space:nowrap">\${esc(m.received_at)}</td>
+      <td title="\${m.direction === 'out' ? '出站回信' : '進站'}">\${m.direction === 'out' ? '📤' : '📥'}</td>
       <td>\${esc(m.from_addr)}</td>
       <td class="addr">\${esc(m.to_addr)}</td>
       <td>\${esc(m.subject)}</td>

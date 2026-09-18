@@ -3,3 +3,6 @@ DASHBOARD_USER = "admin"
 DASHBOARD_PASS = "change-me"
 # 若要在本機測 catch-all：
 # CATCHALL_DESTINATION = "you@gmail.com"
+# M2 回信：填入 Resend API key（並在 Resend 驗證你的 MAIL_DOMAIN）後即啟用反向別名回信
+# RESEND_API_KEY = "re_xxxxxxxx"
+# OUTBOUND_DAILY_LIMIT = "50"
