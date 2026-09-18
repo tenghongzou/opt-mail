@@ -1,13 +1,15 @@
 # opt-mail — 自有網域的一次性信箱
 
-用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0 收信轉發 + M1 別名管理 + M2 一次性地址回信**：
+用你自己的網域（DNS 在 Cloudflare）做一次性信箱。目前完成 **M0 收信轉發 + M1 別名管理 + M2 一次性地址回信 + M3 AI 加值**：
 
 - `*@你的網域` 進來的信，由 Cloudflare Email Worker 依規則**轉發**到你的真實信箱
 - Dashboard 可建立 / 停用 / 刪除別名、查看轉發與回信紀錄
 - **回信**：接上 Resend 後，你在信箱直接按「回覆」就會用**一次性地址**代寄給對方，真實信箱不外洩（reverse alias）
+- **AI 加值**：接上 Anthropic API 後，進站信自動做**一句話摘要 / 分類 / 釣魚偵測**，結果顯示在 Dashboard
 - 資料存在 Cloudflare D1（SQLite）
 
-> M2 回信是**選用**的：設定了 `RESEND_API_KEY` 才啟用；沒設定時進站信照舊用原生 `forward()` 轉發（M0 行為不變）。
+> M2 回信與 M3 AI 都是**選用**的：分別由 `RESEND_API_KEY` / `ANTHROPIC_API_KEY` 有沒有設定決定是否啟用；
+> 都沒設定時，進站信就是最單純的 M0 原生 `forward()` 轉發。
 
 ---
 
@@ -22,12 +24,14 @@
               │    ├─ 一般別名 → 查 D1 → 轉發到真實信箱
               │    │             （接了 Resend：改用 Resend 重送並把 Reply-To
               │    │               設成反向別名，讓你一按回覆就能匿名回信）
+              │    │             （接了 Anthropic：ctx.waitUntil 背景做
+              │    │               摘要／分類／釣魚偵測，回寫該筆紀錄）
               │    └─ 反向別名 → 這是你的回信 → 擁有者驗證 + 每日限流
               │                  → 以「別名@網域」用 Resend 代寄給外部對象
               └─ fetch()  Dashboard / API（Hono）
                      │
                      ▼
-          D1 (aliases, messages, reverse_aliases) ──→ Resend（出站）
+          D1 (aliases, messages, reverse_aliases) ──→ Resend（出站）／ Claude（分析）
 ```
 
 ---
@@ -83,6 +87,23 @@ npm run deploy
 
 > 沒設定 `RESEND_API_KEY` 就不會啟用回信，進站信仍用原生 `forward()` 轉發。
 
+## 設定 AI 加值（M3，選用）
+
+進站信自動摘要、分類與釣魚偵測，交給 Claude 處理：
+
+1. 到 [Anthropic Console](https://console.anthropic.com) 取得 API key，設成機密：
+   `npx wrangler secret put ANTHROPIC_API_KEY`。
+2. （選用）在 `wrangler.toml` 設 `AI_MODEL`。**預設 `claude-opus-5`**（最高品質）；
+   想大幅省成本可改 `claude-haiku-4-5`。
+3. 重新部署。之後每封成功轉發的進站信，會在**背景**（`ctx.waitUntil`，不拖慢收信）
+   呼叫 Claude 產出摘要／分類／釣魚風險分數，結果回寫並顯示在 Dashboard「最近信件」。
+
+- 分析在信件**投遞完成後**才跑，AI 失敗或逾時都不影響收信轉發。
+- 釣魚風險 ≥ 70 會在 Dashboard 標示「⚠️ 疑似釣魚」，40–69 標示「可疑」。
+- 內文過長會截斷到約 8000 字以控制成本。
+
+> 沒設定 `ANTHROPIC_API_KEY` 就完全不會呼叫 Claude，也不產生任何費用。
+
 ## 使用
 
 1. 開 `https://opt-mail.<你的>.workers.dev`（用剛設定的帳密登入）
@@ -110,11 +131,13 @@ npm run dev                      # http://localhost:8787
 | `CATCHALL_DESTINATION` | `CATCHALL_MODE=on` 時，未知地址自動轉發到這（需已驗證） |
 | `OUTBOUND_DAILY_LIMIT` | M2 回信每個別名每日出站上限，預設 `50` |
 | `RESEND_API_KEY`（機密） | M2 回信用的 Resend API key；有設定才啟用回信 |
+| `AI_MODEL` | M3 進站信分析用模型，預設 `claude-opus-5`（省錢可設 `claude-haiku-4-5`） |
+| `ANTHROPIC_API_KEY`（機密） | M3 AI 分析用的 Anthropic API key；有設定才啟用分析 |
 
 ## 路線圖
 
 - [x] **M0** 收信轉發
 - [x] **M1** 別名管理 Dashboard
 - [x] **M2** 用一次性地址回信（reverse alias + Resend + 擁有者驗證 + 出站限流）
-- [ ] **M3** AI 加值（進站信摘要 / 釣魚偵測 / 自動分類）
+- [x] **M3** AI 加值（進站信摘要 / 釣魚偵測 / 自動分類，Claude + 結構化輸出）
 - [ ] **M4** 多使用者、多網域

@@ -42,6 +42,8 @@ export const dashboardHtml = /* html */ `<!doctype html>
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; display: inline-block; }
   .pill.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
   .pill.off { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+  .pill.warn { background: color-mix(in srgb, #f59e0b 20%, transparent); color: #b45309; }
+  .pill.cat { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
   .muted { color: var(--muted); }
   .msg { padding: 8px; font-size: 13px; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
@@ -118,6 +120,7 @@ async function boot() {
   const cfg = await api('/api/config');
   DOMAIN = cfg.domain;
   const parts = [cfg.catchall ? 'catch-all 已開啟' : '僅限已建立的地址', cfg.reply ? '✉️ 回信已啟用' : '回信未啟用'];
+  if (cfg.ai) parts.push('🤖 AI 分析已啟用');
   $('domainLine').textContent = '網域 @' + DOMAIN + '（' + parts.join('、') + '）';
   const tasks = [loadAliases(), loadLogs()];
   if (cfg.reply) { $('reverseCard').style.display = ''; tasks.push(loadReverse()); }
@@ -169,9 +172,22 @@ async function loadLogs() {
       <td title="\${m.direction === 'out' ? '出站回信' : '進站'}">\${m.direction === 'out' ? '📤' : '📥'}</td>
       <td>\${esc(m.from_addr)}</td>
       <td class="addr">\${esc(m.to_addr)}</td>
-      <td>\${esc(m.subject)}</td>
+      <td>\${esc(m.subject)}\${aiInfo(m)}</td>
       <td style="white-space:nowrap">\${label[m.status] || esc(m.status)}</td>
     </tr>\`).join('');
+}
+
+// 進站信的 AI 分析（分類 pill + 釣魚警示 + 一句話摘要）
+function aiInfo(m) {
+  if (!m.summary && m.phishing_score == null && !m.category) return '';
+  const bits = [];
+  const score = m.phishing_score;
+  if (score != null && score >= 70) bits.push('<span class="pill off">⚠️ 疑似釣魚 ' + score + '</span>');
+  else if (score != null && score >= 40) bits.push('<span class="pill warn">可疑 ' + score + '</span>');
+  if (m.category) bits.push('<span class="pill cat">' + esc(m.category) + '</span>');
+  const tags = bits.length ? '<div style="margin-top:4px">' + bits.join(' ') + '</div>' : '';
+  const sum = m.summary ? '<div class="muted" style="margin-top:4px;font-size:12px">🤖 ' + esc(m.summary) + '</div>' : '';
+  return tags + sum;
 }
 
 async function add() {

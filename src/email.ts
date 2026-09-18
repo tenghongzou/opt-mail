@@ -1,6 +1,9 @@
 import PostalMime from 'postal-mime';
 import type { Env } from './types';
 import { sendViaResend, type ResendAttachment } from './resend';
+import { analyzeEmail } from './ai';
+
+type Parsed = Awaited<ReturnType<typeof PostalMime.parse>>;
 
 // 反向別名 token 格式：rp + 18 碼 hex（見 genToken）。用來在進站時快速辨識回信。
 const REVERSE_RE = /^rp[0-9a-f]{18}$/;
@@ -14,7 +17,7 @@ const DEFAULT_DAILY_LIMIT = 50;
 export async function handleEmail(
   message: ForwardableEmailMessage,
   env: Env,
-  _ctx: ExecutionContext,
+  ctx: ExecutionContext,
 ): Promise<void> {
   const to = message.to.toLowerCase();
   const localPart = to.split('@')[0] ?? '';
@@ -35,7 +38,7 @@ export async function handleEmail(
 
   // 1) 已知且啟用 → 轉發到真實信箱
   if (alias && alias.active) {
-    await forwardInbound(message, env, alias, from, to, subject);
+    await forwardInbound(message, env, ctx, alias, from, to, subject);
     return;
   }
 
@@ -56,8 +59,18 @@ export async function handleEmail(
       )
         .bind(localPart, env.CATCHALL_DESTINATION, 'catch-all 自動建立')
         .run();
+      const parsed = env.ANTHROPIC_API_KEY ? await safeParse(message) : null;
       await message.forward(env.CATCHALL_DESTINATION);
-      await log(env, Number(res.meta.last_row_id), 'in', from, to, subject, 'forwarded_catchall');
+      const msgId = await log(
+        env,
+        Number(res.meta.last_row_id),
+        'in',
+        from,
+        to,
+        subject,
+        'forwarded_catchall',
+      );
+      scheduleAnalysis(ctx, env, msgId, from, subject, parsed);
     } catch (err) {
       console.error('catch-all forward failed:', err);
       await log(env, null, 'in', from, to, subject, 'forward_failed');
@@ -79,6 +92,7 @@ export async function handleEmail(
 async function forwardInbound(
   message: ForwardableEmailMessage,
   env: Env,
+  ctx: ExecutionContext,
   alias: { id: number; local_part: string; destination: string },
   from: string,
   to: string,
@@ -86,9 +100,12 @@ async function forwardInbound(
 ): Promise<void> {
   // 未接 Resend → 原生轉發（M0）
   if (!env.RESEND_API_KEY) {
+    // 有接 AI 才需要解析內文；先解析（不影響下方 forward）
+    const parsed = env.ANTHROPIC_API_KEY ? await safeParse(message) : null;
     try {
       await message.forward(alias.destination);
-      await log(env, alias.id, 'in', from, to, subject, 'forwarded');
+      const msgId = await log(env, alias.id, 'in', from, to, subject, 'forwarded');
+      scheduleAnalysis(ctx, env, msgId, from, subject, parsed);
     } catch (err) {
       console.error('forward failed:', err);
       await log(env, alias.id, 'in', from, to, subject, 'forward_failed');
@@ -113,12 +130,47 @@ async function forwardInbound(
       html: parsed.html,
       attachments: mapAttachments(parsed.attachments),
     });
-    await log(env, alias.id, 'in', from, to, subject, 'forwarded');
+    const msgId = await log(env, alias.id, 'in', from, to, subject, 'forwarded');
+    scheduleAnalysis(ctx, env, msgId, from, subject, parsed);
   } catch (err) {
     console.error('inbound resend failed:', err);
     await log(env, alias.id, 'in', from, to, subject, 'forward_failed');
     message.setReject('Temporary delivery failure, please retry later');
   }
+}
+
+// 安全解析原始信件；失敗回 null（不影響收信轉發）
+async function safeParse(message: ForwardableEmailMessage): Promise<Parsed | null> {
+  try {
+    return await PostalMime.parse(message.raw, { attachmentEncoding: 'base64' });
+  } catch (err) {
+    console.error('parse failed:', err);
+    return null;
+  }
+}
+
+// 背景（不阻塞收信）用 AI 分析並回寫該筆信件紀錄
+function scheduleAnalysis(
+  ctx: ExecutionContext,
+  env: Env,
+  msgId: number | null,
+  from: string,
+  subject: string,
+  parsed: Parsed | null,
+): void {
+  if (!env.ANTHROPIC_API_KEY || !msgId || !parsed) return;
+  ctx.waitUntil(
+    (async () => {
+      const text = parsed.text || parsed.html || '';
+      const a = await analyzeEmail(env, { from, subject, text });
+      if (!a) return;
+      await env.DB.prepare(
+        'UPDATE messages SET summary = ?, category = ?, phishing_score = ?, ai_model = ? WHERE id = ?',
+      )
+        .bind(a.summary, a.category, a.phishing_score, a.model, msgId)
+        .run();
+    })().catch((err) => console.error('analysis failed:', err)),
+  );
 }
 
 /**
@@ -275,10 +327,12 @@ async function log(
   to: string,
   subject: string,
   status: string,
-): Promise<void> {
-  await env.DB.prepare(
+): Promise<number | null> {
+  const res = await env.DB.prepare(
     'INSERT INTO messages (alias_id, direction, from_addr, to_addr, subject, status) VALUES (?, ?, ?, ?, ?, ?)',
   )
     .bind(aliasId, direction, from, to, subject, status)
     .run();
+  const id = res.meta.last_row_id;
+  return typeof id === 'number' ? id : null;
 }

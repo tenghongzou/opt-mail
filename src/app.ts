@@ -22,6 +22,7 @@ app.get('/api/config', (c) =>
     domain: c.env.MAIL_DOMAIN,
     catchall: c.env.CATCHALL_MODE === 'on',
     reply: !!c.env.RESEND_API_KEY, // M2 回信是否啟用（有接 Resend）
+    ai: !!c.env.ANTHROPIC_API_KEY, // M3 AI 分析是否啟用
   }),
 );
 

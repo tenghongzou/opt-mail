@@ -19,8 +19,13 @@ CREATE TABLE IF NOT EXISTS messages (
   from_addr   TEXT,
   to_addr     TEXT,
   subject     TEXT,
-  status      TEXT,                             -- forwarded / dropped_disabled / no_alias / forwarded_catchall / forward_failed
+  status      TEXT,                             -- forwarded / dropped_disabled / no_alias / forwarded_catchall / forward_failed / sent / send_failed / reply_*
   received_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  -- M3 AI 分析（背景回寫，可能為 NULL）
+  summary        TEXT,                          -- 一句話摘要
+  category       TEXT,                          -- 分類
+  phishing_score INTEGER,                       -- 釣魚風險 0-100
+  ai_model       TEXT,                          -- 產生分析的模型
   FOREIGN KEY (alias_id) REFERENCES aliases(id)
 );
 

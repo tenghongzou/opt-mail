@@ -14,6 +14,11 @@ export interface Env {
   RESEND_API_KEY?: string;
   // 每個別名每日出站上限（防濫用），字串數字，預設 50
   OUTBOUND_DAILY_LIMIT?: string;
+  // ── M3 AI 加值 ────────────────────────────────────────────
+  // Anthropic API key（機密）。有設定 → 進站信自動做摘要／分類／釣魚偵測；未設定 → 略過。
+  ANTHROPIC_API_KEY?: string;
+  // 分析用模型，預設 claude-opus-5；想省錢可設 "claude-haiku-4-5"
+  AI_MODEL?: string;
 }
 
 export interface Alias {

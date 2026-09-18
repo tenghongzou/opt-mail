@@ -25,9 +25,15 @@ CATCHALL_MODE = "off"
 # 每個別名每日出站上限（防濫用）。留空預設 50。
 OUTBOUND_DAILY_LIMIT = "50"
 
+# ── M3 AI 加值 ──────────────────────────────────────────────
+# 進站信分析用模型。留空預設 claude-opus-5；想省錢可改 "claude-haiku-4-5"。
+AI_MODEL = "claude-opus-5"
+
 # ── 機密（不要寫在這，用 wrangler secret put 設定）──────────────
 # npx wrangler secret put DASHBOARD_USER
 # npx wrangler secret put DASHBOARD_PASS
 # M2 回信需要（同時要在 Resend 驗證 MAIL_DOMAIN）：
 # npx wrangler secret put RESEND_API_KEY
+# M3 AI 分析需要：
+# npx wrangler secret put ANTHROPIC_API_KEY
 # 本機開發時放在 .dev.vars（見 .dev.vars.example）
