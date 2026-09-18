@@ -1,0 +1,21 @@
+{
+  "name": "opt-mail",
+  "version": "0.1.0",
+  "private": true,
+  "description": "自有網域的一次性信箱 — 收信轉發 (M0) + 別名管理 (M1)，跑在 Cloudflare Workers + D1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "db:init": "wrangler d1 execute opt-mail-db --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute opt-mail-db --local --file=./schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260910.1",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.0.0"
+  }
+}

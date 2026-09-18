@@ -1,0 +1,5 @@
+# 複製成 .dev.vars（此檔已被 .gitignore 忽略），wrangler dev 會自動載入
+DASHBOARD_USER = "admin"
+DASHBOARD_PASS = "change-me"
+# 若要在本機測 catch-all：
+# CATCHALL_DESTINATION = "you@gmail.com"

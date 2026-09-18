@@ -1,0 +1,27 @@
+name = "opt-mail"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+
+# ── D1 資料庫 ──────────────────────────────────────────────
+# 先跑：npx wrangler d1 create opt-mail-db
+# 再把回傳的 database_id 貼到下面
+[[d1_databases]]
+binding = "DB"
+database_name = "opt-mail-db"
+database_id = "REPLACE_ME_AFTER_D1_CREATE"
+
+# ── 一般設定（非機密，可直接寫這）────────────────────────────
+[vars]
+# 你的網域，只用來在 Dashboard 顯示完整地址，例如 "example.com"
+MAIL_DOMAIN = "example.com"
+# 收到「未建立的地址」時的行為：
+#   "off" = 直接退信（只有你在 Dashboard 建過的 alias 才會轉發）← 建議先用這個
+#   "on"  = catch-all，任何地址第一次被寄到就自動建立並轉發到 CATCHALL_DESTINATION
+CATCHALL_MODE = "off"
+# 若 CATCHALL_MODE = "on" 才需要，設你真正收信的信箱（且要先在 Email Routing 驗證過）
+# CATCHALL_DESTINATION = "you@gmail.com"
+
+# ── 機密（不要寫在這，用 wrangler secret put 設定）──────────────
+# npx wrangler secret put DASHBOARD_USER
+# npx wrangler secret put DASHBOARD_PASS
+# 本機開發時放在 .dev.vars（見 .dev.vars.example）
